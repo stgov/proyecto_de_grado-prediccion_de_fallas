@@ -30,6 +30,8 @@ with main_col1:
 
     total_rows_raw = len(df_raw)
     num_pages_raw = (total_rows_raw + selected_page_length_raw - 1) // selected_page_length_raw if selected_page_length_raw > 0 else 1
+    # Limitar a máximo 3 páginas
+    num_pages_raw = min(num_pages_raw, 3)
     page_options_raw = list(range(1, num_pages_raw + 1)) if num_pages_raw > 0 else [1]
 
     if current_page_raw > num_pages_raw:
@@ -73,6 +75,8 @@ with main_col2:
 
     total_rows_proc = len(df_process_robot)
     num_pages_proc = (total_rows_proc + selected_page_length_proc - 1) // selected_page_length_proc if selected_page_length_proc > 0 else 1
+    # Limitar a máximo 3 páginas
+    num_pages_proc = min(num_pages_proc, 3)
     page_options_proc = list(range(1, num_pages_proc + 1)) if num_pages_proc > 0 else [1]
 
     if current_page_proc > num_pages_proc:
