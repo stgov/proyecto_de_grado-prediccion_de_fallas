@@ -123,7 +123,7 @@ Navega a la carpeta `notebooks/` para acceder a los análisis detallados.
 
 ![Predicción](screenshots/prediccion.png)
 
-## 📁 Datos Utilizados
+## 📁 Datos Utilizados 
 
 El sistema analiza datos de logs de trabajo de robots RPA que incluyen:
 
