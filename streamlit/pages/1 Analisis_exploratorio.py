@@ -141,3 +141,152 @@ with plot_col2:
     fig_tasa_excepcion.update_layout(title_text='Tasa de Excepción Diaria',
                                     xaxis_title="Fecha", yaxis_title="Tasa de Excepción")
     st.plotly_chart(fig_tasa_excepcion, use_container_width=True)
+
+st.markdown("---")
+
+st.header("Análisis de Período Específico")
+
+# Controles para seleccionar el rango de fechas
+date_col1, date_col2 = st.columns(2)
+with date_col1:
+    start_date = st.date_input("Fecha de inicio", df_avg_global.index.min())
+with date_col2:
+    end_date = st.date_input("Fecha de fin", df_avg_global.index.max())
+
+# Convertir a Timestamp para la comparación
+start_date_dt = pd.to_datetime(start_date).date()
+end_date_dt = pd.to_datetime(end_date).date()
+
+# Filtrar los datos para el período seleccionado
+filtered_avg_global = df_avg_global.loc[start_date:end_date]
+
+if 'fecha' not in df_process_robot.columns or df_process_robot['fecha'].dtype != 'object':
+    # Asegurarse de que el índice sea DatetimeIndex antes de acceder a .date
+    if not isinstance(df_process_robot.index, pd.DatetimeIndex):
+        df_process_robot.index = pd.to_datetime(df_process_robot.index)
+    df_process_robot['fecha'] = df_process_robot.index.date
+
+filtered_process_robot = df_process_robot[
+    (df_process_robot['fecha'] >= start_date_dt) &
+    (df_process_robot['fecha'] <= end_date_dt)
+]
+
+if 'fecha' not in df_raw.columns or df_raw['fecha'].dtype != 'object':
+    df_raw['fecha'] = pd.to_datetime(df_raw['Loaded']).dt.date
+    
+filtered_raw = df_raw[
+    (df_raw['fecha'] >= start_date_dt) &
+    (df_raw['fecha'] <= end_date_dt)
+]
+
+
+if not filtered_avg_global.empty:
+    # Gráfico de tasa de excepción para el período
+    st.subheader(f"Tasa de Excepción Diaria ({start_date.strftime('%Y-%m-%d')} a {end_date.strftime('%Y-%m-%d')})")
+    fig_filtered_tasa = go.Figure(data=[
+        go.Scatter(
+            x=filtered_avg_global.index,
+            y=filtered_avg_global['tasa_excepcion'],
+            mode='lines+markers',
+            marker_color='green'
+        )
+    ])
+    fig_filtered_tasa.update_layout(
+        title_text='Tasa de Excepción para el Período Seleccionado',
+        xaxis_title="Fecha",
+        yaxis_title="Tasa de Excepción"
+    )
+    st.plotly_chart(fig_filtered_tasa, use_container_width=True)
+
+    # Análisis de fallos por robot y proceso
+    analysis_col1, analysis_col2 = st.columns(2)
+
+    with analysis_col1:
+        st.subheader("Ranking de Robots con más Excepciones")
+        if not filtered_process_robot.empty:
+            exceptions_by_robot = filtered_process_robot.copy()
+            exceptions_by_robot['exception_count'] = exceptions_by_robot['entries'] * exceptions_by_robot['tasa_excepcion']
+            failed_robots = exceptions_by_robot.groupby('UserRobot')['exception_count'].sum().sort_values(ascending=False).reset_index()
+            st.dataframe(failed_robots, use_container_width=True)
+
+            if not failed_robots.empty:
+                top_robot = failed_robots.iloc[0]['UserRobot']
+                st.subheader(f"Razones de Excepción para {top_robot}")
+                robot_exceptions = filtered_raw[
+                    (filtered_raw['UserRobot'] == top_robot) &
+                    (filtered_raw['FinishStatus'] == 'Exception')
+                ]
+                if not robot_exceptions.empty:
+                    reason_counts = robot_exceptions['ExceptionReason'].value_counts().reset_index()
+                    reason_counts.columns = ['Razón de Excepción', 'Cantidad']
+                    st.table(reason_counts)
+                else:
+                    st.info(f"No se encontraron razones de excepción para el robot {top_robot}.")
+
+        else:
+            st.info("No hay datos de robots para el período seleccionado.")
+
+    with analysis_col2:
+        st.subheader("Ranking de Procesos con más Excepciones")
+        if not filtered_process_robot.empty:
+            exceptions_by_process = filtered_process_robot.copy()
+            exceptions_by_process['exception_count'] = exceptions_by_process['entries'] * exceptions_by_process['tasa_excepcion']
+            failed_processes = exceptions_by_process.groupby('ProcessName')['exception_count'].sum().sort_values(ascending=False).reset_index()
+            st.dataframe(failed_processes, use_container_width=True)
+
+            if not failed_processes.empty:
+                top_process = failed_processes.iloc[0]['ProcessName']
+                st.subheader(f"Razones de Excepción para {top_process}")
+                process_exceptions = filtered_raw[
+                    (filtered_raw['ProcessName'] == top_process) &
+                    (filtered_raw['FinishStatus'] == 'Exception')
+                ]
+                if not process_exceptions.empty:
+                    reason_counts = process_exceptions['ExceptionReason'].value_counts().reset_index()
+                    reason_counts.columns = ['Razón de Excepción', 'Cantidad']
+                    st.table(reason_counts)
+                else:
+                    st.info(f"No se encontraron razones de excepción para el proceso {top_process}.")
+        else:
+            st.info("No hay datos de procesos para el período seleccionado.")
+
+    st.markdown("---")
+    st.subheader("Análisis de Series de Tiempo Individuales")
+
+    # Obtener robots y procesos únicos del período filtrado
+    unique_robots = filtered_process_robot['UserRobot'].unique()
+    unique_processes = filtered_process_robot['ProcessName'].unique()
+
+    # Selectores para robots y procesos
+    select_col1, select_col2 = st.columns(2)
+    with select_col1:
+        selected_robots = st.multiselect("Seleccionar Robots para visualizar su serie", options=unique_robots)
+    with select_col2:
+        selected_processes = st.multiselect("Seleccionar Procesos para visualizar su serie", options=unique_processes)
+
+    # Gráficos para las series de tiempo individuales
+    plot_series_col1, plot_series_col2 = st.columns(2)
+    with plot_series_col1:
+        if selected_robots:
+            fig_robot_series = go.Figure()
+            for robot in selected_robots:
+                robot_data = filtered_process_robot[filtered_process_robot['UserRobot'] == robot].sort_index()
+                fig_robot_series.add_trace(go.Scatter(x=robot_data.index, y=robot_data['tasa_excepcion'], name=robot, mode='lines+markers'))
+            fig_robot_series.update_layout(title_text="Tasa de Excepción por Robot", xaxis_title="Fecha", yaxis_title="Tasa de Excepción")
+            st.plotly_chart(fig_robot_series, use_container_width=True)
+        else:
+            st.info("Seleccione al menos un robot para ver su serie de tiempo.")
+
+    with plot_series_col2:
+        if selected_processes:
+            fig_process_series = go.Figure()
+            for process in selected_processes:
+                process_data = filtered_process_robot[filtered_process_robot['ProcessName'] == process].sort_index()
+                fig_process_series.add_trace(go.Scatter(x=process_data.index, y=process_data['tasa_excepcion'], name=process, mode='lines+markers'))
+            fig_process_series.update_layout(title_text="Tasa de Excepción por Proceso", xaxis_title="Fecha", yaxis_title="Tasa de Excepción")
+            st.plotly_chart(fig_process_series, use_container_width=True)
+        else:
+            st.info("Seleccione al menos un proceso para ver su serie de tiempo.")
+
+else:
+    st.warning("No hay datos disponibles para el rango de fechas seleccionado.")
